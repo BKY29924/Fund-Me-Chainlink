@@ -5,16 +5,11 @@ import {Test, console} from "forge-std/Test.sol";
 import {FundMe} from "../src/FundMe.sol";
 import {DeployFundMe} from "../script/DeployFundMe.s.sol";
 
-// import {MockV3Aggregator} from "./MockV3Aggregator.t.sol";
-
 contract FundMeTest is Test {
     FundMe fundMe;
-    // MockV3Aggregator mockV3Aggregator;
     DeployFundMe deployFundMe;
 
     function setUp() external {
-        // mockV3Aggregator = new MockV3Aggregator(8, 2000e8);
-        // fundMe = new FundMe(address(mockV3Aggregator));
         deployFundMe = new DeployFundMe();
         fundMe = deployFundMe.run();
     }
@@ -24,7 +19,6 @@ contract FundMeTest is Test {
     }
 
     function testOwnerMsgSender() public view {
-        // assertEq(fundMe.getOwner(), address(this));
         assertEq(fundMe.getOwner(), msg.sender);
     }
 
