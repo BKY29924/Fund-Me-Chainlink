@@ -1,56 +1,64 @@
-# Load biến môi trường từ .env (nếu có)
 -include .env
 
-# Mặc định target khi chạy 'make'
-.DEFAULT_GOAL := help
+.PHONY: all test clean deploy fund help install snapshot format anvil zktest
 
-# Khai báo các target luôn chạy, bỏ qua kiểm tra file tồn tại
-.PHONY: build test anvil deploy-local deploy-sepolia logs help
+DEFAULT_ANVIL_KEY := 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
+DEFAULT_ZKSYNC_LOCAL_KEY := 0x7726827caac94a7f9e1b160f7ea819f172f7b6f9d2a97f992c38edeab82d4110
 
-# ==========================
-# LỆNH CƠ BẢN
-# ==========================
+all: clean remove install update build
 
-## Build smart contract
-build: ## Compile contracts
-	forge build
+# Clean the repo
+clean  :; forge clean
 
-## Chạy test
-test: ## Run tests
-	forge test -vvvv
+# Remove modules
+remove :; rm -rf .gitmodules && rm -rf .git/modules/* && rm -rf lib && touch .gitmodules && git add . && git commit -m "modules"
 
-## Chạy local node Anvil
-anvil: ## Start local Anvil node
-	anvil
+install :; forge install cyfrin/foundry-devops@0.2.2 && forge install smartcontractkit/chainlink-brownie-contracts@1.1.1 && forge install foundry-rs/forge-std@v1.8.2
 
-# ==========================
-# DEPLOY
-# ==========================
+# Update Dependencies
+update:; forge update
 
-## Deploy lên local Anvil
-deploy-local: ## Deploy to local Anvil
-	forge script script/DeployFundMe.s.sol:DeployFundMe \
-		--rpc-url http://127.0.0.1:8545 \
-		--private-key $(LOCAL_PRIVATE_KEY) \
-		--broadcast -vvvv
+build:; forge build
 
-## Deploy lên Sepolia
-deploy-sepolia: ## Deploy to Sepolia
-	forge script script/DeployFundMe.s.sol:DeployFundMe \
-		--rpc-url $(SEPOLIA_RPC_URL) \
-		--private-key $(SEPOLIA_PRIVATE_KEY) \
-		--broadcast --verify \
-		--etherscan-api-key $(ETHERSCAN_API_KEY) -vvvv
+zkbuild :; forge build --zksync
 
-# ==========================
-# TIỆN ÍCH
-# ==========================
+test :; forge test
 
-## Xem log
-logs: ## View Anvil logs
-	tail -f anvil.log
+zktest :; foundryup-zksync && forge test --zksync && foundryup
 
-## Xem trợ giúp
-help: ## Show this help
-	@grep -E '^[a-zA-Z0-9_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
-		awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}'
+snapshot :; forge snapshot
+
+format :; forge fmt
+
+anvil :; anvil -m 'test test test test test test test test test test test junk' --steps-tracing --block-time 1
+
+zk-anvil :; npx zksync-cli dev start
+
+deploy:
+	@forge script script/DeployFundMe.s.sol:DeployFundMe $(NETWORK_ARGS)
+
+NETWORK_ARGS := --rpc-url http://localhost:8545 --private-key $(DEFAULT_ANVIL_KEY) --broadcast
+
+ifeq ($(findstring --network sepolia,$(ARGS)),--network sepolia)
+	NETWORK_ARGS := --rpc-url $(SEPOLIA_RPC_URL) --account $(ACCOUNT) --broadcast --verify --etherscan-api-key $(ETHERSCAN_API_KEY) -vvvv
+endif
+
+deploy-sepolia:
+	@forge script script/DeployFundMe.s.sol:DeployFundMe $(NETWORK_ARGS)
+
+# As of writing, the Alchemy zkSync RPC URL is not working correctly 
+deploy-zk:
+	forge create src/FundMe.sol:FundMe --rpc-url http://127.0.0.1:8011 --private-key $(DEFAULT_ZKSYNC_LOCAL_KEY) --constructor-args $(shell forge create test/mock/MockV3Aggregator.sol:MockV3Aggregator --rpc-url http://127.0.0.1:8011 --private-key $(DEFAULT_ZKSYNC_LOCAL_KEY) --constructor-args 8 200000000000 --legacy --zksync | grep "Deployed to:" | awk '{print $$3}') --legacy --zksync
+
+deploy-zk-sepolia:
+	forge create src/FundMe.sol:FundMe --rpc-url ${ZKSYNC_SEPOLIA_RPC_URL} --account default --constructor-args 0xfEefF7c3fB57d18C5C6Cdd71e45D2D0b4F9377bF --legacy --zksync
+
+
+# For deploying Interactions.s.sol:FundFundMe as well as for Interactions.s.sol:WithdrawFundMe we have to include a sender's address `--sender <ADDRESS>`
+SENDER_ADDRESS := <sender's address>
+ 
+fund:
+	@forge script script/Interactions.s.sol:FundFundMe --sender $(SENDER_ADDRESS) $(NETWORK_ARGS)
+
+withdraw:
+	@forge script script/Interactions.s.sol:WithdrawFundMe --sender $(SENDER_ADDRESS) $(NETWORK_ARGS)
